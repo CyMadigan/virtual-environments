@@ -4,6 +4,8 @@ param (
     $ImageName
 )
 
+$ErrorActionPreference = "Stop"
+
 Import-Module MarkdownPS
 Import-Module "$PSScriptRoot/SoftwareReport.Common.psm1" -DisableNameChecking
 Import-Module "$PSScriptRoot/SoftwareReport.Xcode.psm1" -DisableNameChecking
@@ -19,26 +21,7 @@ Import-Module "$PSScriptRoot/../helpers/Xcode.Helpers.psm1"
 # Operating System info
 $os = Get-OSVersion
 
-# Language and Runtime
-$nodejsVersion = Run-Command "node --version"
-$nvmVersion = Get-NVMVersion
-$nvmCachedVersions = Get-NVMNodeVersionList
-$pythonVersion = Run-Command "python --version"
-$python3Version = Run-Command "python3 --version"
-$rubyVersion = Run-Command "ruby --version" | Take-Part -Part 1
-$goVersion = Get-GoVersion
-$phpVersion = Run-Command "php --version" | Select-Object -First 1 | Take-Part -Part 0,1
-$juliaVersion = Run-Command "julia --version" | Take-Part -Part 0,2
-
 $markdown = ""
-
-# Get announcements
-if ($env:ANNOUNCEMENTS) {
-    $markdown += $env:ANNOUNCEMENTS
-    $markdown += New-MDNewLine
-    $markdown += "***"
-    $markdown += New-MDNewLine
-}
 
 # OS info
 $markdown += Build-OSInfoSection
@@ -55,174 +38,127 @@ if ( -not $os.IsHighSierra) {
     $markdown += New-MDList -Style Unordered -NoNewLine -Lines $lines
 }
 
+if ($os.IsLessThanBigSur) {
+    $markdown += New-MDList -Style Unordered -Lines @(Get-RVersion) -NoNewLine
+}
+
+# Language and Runtime
 $markdown += New-MDList -Style Unordered -Lines @(
-    "Node.js ${nodejsVersion}"
-    "NVM ${nvmVersion}"
-    "NVM - Cached node versions: ${nvmCachedVersions}"
-    $pythonVersion,
-    $python3Version,
-    "Ruby ${rubyVersion}",
+    (Get-BashVersion),
+    (Get-NodeVersion),
+    (Get-NVMVersion),
+    (Get-NVMNodeVersionList),
+    (Get-PythonVersion),
+    (Get-Python3Version),
+    (Get-RubyVersion),
     (Get-DotnetVersionList),
-    (Get-RVersion),
-    "Go ${goVersion}",
-    "$phpVersion",
-    "$juliaVersion"
+    (Get-GoVersion),
+    (Get-PHPVersion),
+    (Get-JuliaVersion)
 )
 
 # Package Management
-$bundlerVersion = Run-Command "bundle --version"
-$carthageVersion = Run-Command "carthage version" -SuppressStderr
-$cocoaPodsVersion = Run-Command "pod --version"
-$homebrewVersion = Run-Command "brew --version" | Select-Object -First 1
-$npmVersion = Run-Command "npm --version"
-$yarnVersion = Run-Command "yarn --version"
-$nugetVersion = Run-Command "nuget help" | Select-Object -First 1 | Take-Part -Part 2
-$pipVersion = Get-PipVersion -Version 2
-$pip3Version = Get-PipVersion -Version 3
-$condaVersion = Invoke-Expression "conda --version"
-$rubyGemsVersion = Run-Command "gem --version"
-$composerVersion = Run-Command "composer --version" | Take-Part -Part 2
-
 $markdown += New-MDHeader "Package Management" -Level 3
 if ($os.IsHigherThanMojave) {
-    $vcpkgVersion = Get-VcpkgVersion
-    $markdown += New-MDList -Lines $vcpkgVersion -Style Unordered -NoNewLine
+    $markdown += New-MDList -Lines (Get-VcpkgVersion) -Style Unordered -NoNewLine
 }
+
 $markdown += New-MDList -Style Unordered -Lines @(
-    $bundlerVersion,
-    "Carthage ${carthageVersion}",
-    "CocoaPods ${cocoaPodsVersion}",
-    $homebrewVersion,
-    "NPM ${npmVersion}",
-    "Yarn ${yarnVersion}",
-    "NuGet ${nugetVersion}",
-    "Pip ${pipVersion}",
-    "Pip ${pip3Version}",
-    "Mini${condaVersion}",
-    "RubyGems ${rubyGemsVersion}",
-    "Composer ${composerVersion}"
+    (Get-PipVersion -Version 2),
+    (Get-PipVersion -Version 3),
+    (Get-PipxVersion),
+    (Get-BundlerVersion),
+    (Get-CarthageVersion),
+    (Get-CocoaPodsVersion),
+    (Get-HomebrewVersion),
+    (Get-NPMVersion),
+    (Get-YarnVersion),
+    (Get-NuGetVersion),
+    (Get-CondaVersion),
+    (Get-RubyGemsVersion),
+    (Get-ComposerVersion)
 )
 
 # Project Management
-$mavenVersion = Run-Command "mvn -version" | Select-Object -First 1 | Take-Part -Part 2
-#gradle output differs on the first launch – a welcome message, that we don't need is rendered. The solution is to take the last "Gradle" occurrence from the output
-$gradleVersion = (Run-Command "gradle --version" | Select-String "Gradle")[-1]
-$apacheAnt = Run-Command "ant -version"  | Take-Part -Part 0,1,3
-
 $markdown += New-MDHeader "Project Management" -Level 3
 $markdown += New-MDList -Style Unordered -Lines @(
-    "Apache Maven ${mavenVersion}",
-    $gradleVersion,
-    $apacheAnt
+    (Get-MavenVersion),
+    (Get-GradleVersion),
+    (Get-ApacheAntVersion)
 )
 
 # Utilities
-$curlVersion = Run-Command "curl --version" | Select-Object -First 1 | Take-Part -Part 1
-$gitVersion = Run-Command "git --version" | Take-Part -Part 2
-$ghVersion = Run-Command "gh --version" | Select-String "gh version" | Select-Object -First 1 | Take-Part -Part 2
-$gitLFSVersion = Run-Command "git-lfs version" | Take-Part -Part 0 | Take-Part -Part 1 -Delimiter "/"
-$hubVersion = Run-Command "hub version | grep 'hub version'" | Take-Part -Part 2
-$wgetVersion = Run-Command "wget --version" | Select-String "GNU Wget" | Take-Part -Part 2
-$svnVersion = Run-Command "svn --version --quiet"
-$parallelVersion = Run-Command "parallel --version" | Select-String "GNU parallel" | Select-Object -First 1
-$jqVersion = Run-Command "jq --version" | Take-Part -Part 1 -Delimiter "-"
-$opensslVersion = Get-Item /usr/local/opt/openssl | ForEach-Object {"{0} ``({1} -> {2})``" -f (Run-Command "openssl version"), $_.FullName, $_.Target}
-$gpgVersion = Run-Command "gpg --version" | Select-String 'gpg (GnuPG)' -SimpleMatch
-$postgresClientVersion = Run-Command "psql --version"
-$postgresServerVersion = Run-Command "pg_config --version"
-$aria2Version = Run-Command "aria2c --version" | Select-Object -First 1 | Take-Part -Part 2
-$azcopyVersion = Run-Command "azcopy --version" | Take-Part -Part 2
-$zstdVersion = Run-Command "zstd --version" | Take-Part -Part 1 -Delimiter "v" | Take-Part -Part 0 -Delimiter ","
-$bazelVersion = Run-Command "bazel --version" | Take-Part -Part 0 -Delimiter "-"
-$bazeliskVersion = Run-Command "bazelisk version" | Select-String "Bazelisk version:" | Take-Part -Part 1 -Delimiter ":"
-$packerVersion = Run-Command "packer --version"
-$helmVersion = Run-Command "helm version --short"
-$vbox = Run-Command "vboxmanage -v"
-$vagrant = Run-Command "vagrant -v"
-$mongo = Run-Command "mongo --version" | Select-String "MongoDB shell version" | Take-Part -Part 3
-$mongod = Run-Command "mongod --version" | Select-String "db version " | Take-Part -Part 2
-$p7zip = Run-Command "7z i" | Select-String "7-Zip" | Take-Part -Part 0,2
-
 $markdown += New-MDHeader "Utilities" -Level 3
 $markdown += New-MDList -Style Unordered -NoNewLine -Lines @(
-    "Curl ${curlVersion}",
-    "Git: ${gitVersion}",
-    "Git LFS: ${gitLFSVersion}",
-    "GitHub CLI: ${ghVersion}",
-    "Hub CLI: ${hubVersion}",
-    "GNU Wget ${wgetVersion}",
-    "Subversion (SVN) ${svnVersion}",
-    "Packer $packerVersion",
-    $parallelVersion,
-    $opensslVersion,
-    "jq ${jqVersion}",
-    $gpgVersion,
-    $postgresClientVersion,
-    $postgresServerVersion,
-    "aria2 $aria2Version",
-    "azcopy $azcopyVersion",
-    "zstd $zstdVersion",
-    $bazelVersion,
-    "bazelisk $($bazeliskVersion.Trim())",
-    "helm $helmVersion",
-    "virtualbox $vbox",
-    "mongo $mongo",
-    "mongod $mongod",
-    "$vagrant",
-    $p7zip
+    (Get-CurlVersion),
+    (Get-GitVersion),
+    (Get-GitLFSVersion),
+    (Get-GitHubCLIVersion),
+    (Get-HubVersion),
+    (Get-WgetVersion),
+    (Get-SVNVersion),
+    (Get-PackerVersion),
+    (Get-OpenSSLVersion),
+    (Get-JqVersion),
+    (Get-GPGVersion),
+    (Get-PostgresClientVersion),
+    (Get-PostgresServerVersion),
+    (Get-Aria2Version),
+    (Get-AzcopyVersion),
+    (Get-ZstdVersion),
+    (Get-BazelVersion),
+    (Get-BazeliskVersion),
+    (Get-HelmVersion),
+    (Get-MongoVersion),
+    (Get-MongodVersion),
+    (Get-7zipVersion),
+    (Get-BsdtarVersion),
+    (Get-GnuTarVersion)
 )
 if ($os.IsHigherThanMojave) {
-    $newmanVersion = Run-Command "newman --version"
-    $markdown += New-MDList -Lines "Newman $newmanVersion" -Style Unordered
+    $markdown += New-MDList -Lines (Get-NewmanVersion) -Style Unordered -NoNewLine
+}
+if ($os.IsLessThanBigSur) {
+    $markdown += New-MDList -Style Unordered -Lines @(
+        (Get-VirtualBoxVersion),
+        (Get-VagrantVersion),
+        (Get-ParallelVersion)
+    )
 }
 $markdown += New-MDNewLine
 
 # Tools
-$fastlaneVersion = Run-Command "fastlane --version" | Select-String "^fastlane [0-9]" | Take-Part -Part 1
-$cmakeVersion = Run-Command "cmake --version" | Select-Object -First 1 | Take-Part -Part 2
-$appcenterCLIVersion = Run-Command "appcenter --version" | Take-Part -Part 2
-$azureCLIVersion = Run-Command "az -v" | Select-String "^azure-cli" | Take-Part -Part 1
-$awsVersion = Run-Command "aws --version" | Take-Part -Part 0 | Take-Part -Delimiter "/" -Part 1
-$aliyunVersion = Run-Command "aliyun --version" | Select-String "Alibaba Cloud Command Line Interface Version " | Take-Part -Part 6
-$awsSamVersion = Run-Command "sam --version" | Take-Part -Part 3
-$awsSessionManagerVersion = Run-Command "session-manager-plugin --version" 
-$ghcUpVersion = Run-Command "ghcup --version" | Take-Part -Part 5
-$ghcVersion = Run-Command "ghc --version" | Take-Part -Part 7 
-$cabalVersion = Run-Command "cabal --version" | Take-Part -Part 3
-$stackVersion = Run-Command "stack --version" | Take-Part -Part 1 | ForEach-Object {$_.replace(",","")}
-
 $markdown += New-MDHeader "Tools" -Level 3
 $markdown += New-MDList -Style Unordered -NoNewLine -Lines @(
-    "Fastlane ${fastlaneVersion}",
-    "Cmake ${cmakeVersion}",
-    "App Center CLI ${appcenterCLIVersion}",
-    "Azure CLI ${azureCLIVersion}",
-    "AWS CLI ${awsVersion}",
-    "AWS SAM CLI ${awsSamVersion}",
-    "AWS Session Manager CLI ${awsSessionManagerVersion}",
-    "Aliyun CLI ${aliyunVersion}"
+    (Get-FastlaneVersion),
+    (Get-CmakeVersion),
+    (Get-AppCenterCLIVersion),
+    (Get-AzureCLIVersion),
+    (Get-AWSCLIVersion),
+    (Get-AWSSAMCLIVersion),
+    (Get-AWSSessionManagerCLIVersion),
+    (Get-AliyunCLIVersion),
+    (Get-XcodeCommandLineToolsVersion)
 )
 
 if( -not $os.IsHighSierra) {
     $markdown += New-MDList -Style Unordered -Lines @(
-        "GHCup ${ghcUpVersion}",
-        "GHC ${ghcVersion}",
-        "Cabal ${cabalVersion}",
-        "Stack ${stackVersion}"
+        (Get-GHCupVersion),
+        (Get-GHCVersion),
+        (Get-CabalVersion),
+        (Get-StackVersion)
     )
 }
 
 # Linters
 $markdown += New-MDHeader "Linters" -Level 3
-$yamllintVersion = Run-Command "yamllint --version"
 $markdown += New-MDList -Style Unordered -NoNewLine -Lines @(
-    $yamllintVersion
+    (Get-YamllintVersion)
 )
 
 if ( -not $os.IsHighSierra) {
-    $swiftlintVersion = Run-Command "swiftlint version"
     $markdown += New-MDList -Style Unordered -Lines @(
-        "SwiftLint ${swiftlintVersion}"
+        (Get-SwiftLintVersion)
     )
 }
 
@@ -236,24 +172,26 @@ $markdown += Get-JavaVersions | New-MDTable
 $markdown += Build-ToolcacheSection
 
 if ( -not $os.IsHighSierra) {
-    $rustVersion = Get-RustVersion
     $markdown += New-MDHeader "Rust Tools" -Level 3
     $markdown += New-MDList -Style Unordered -Lines @(
-        "Rust $rustVersion",
-        (Get-RustupVersion)
+        (Get-RustVersion),
+        (Get-RustupVersion),
+        (Get-RustdocVersion),
+        (Get-RustCargoVersion)
     )
     $markdown += New-MDHeader "Packages" -Level 4
     $markdown += New-MDList -Style Unordered -Lines @(
         (Get-Bindgen),
         (Get-Cbindgen),
         (Get-Cargooutdated),
-        (Get-Cargoaudit)
+        (Get-Cargoaudit),
+        (Get-RustfmtVersion),
+        (Get-RustClippyVersion)
     )
 }
 
 $markdown += New-MDHeader "PowerShell Tools" -Level 3
-$powershellVersion = Run-Command "powershell --version"
-$markdown += New-MDList -Lines $powershellVersion -Style Unordered
+$markdown += New-MDList -Lines (Get-PowershellVersion) -Style Unordered
 
 $markdown += New-MDHeader "PowerShell Modules" -Level 4
 $markdown += Get-PowerShellModules | New-MDTable
@@ -279,6 +217,8 @@ $markdown += New-MDList -Lines (Build-XamarinAndroidList) -Style Unordered
 $markdown += New-MDHeader "Unit Test Framework" -Level 4
 $markdown += New-MDList -Lines @(Get-NUnitVersion) -Style Unordered
 
+# First run doesn't provide full data about devices and runtimes
+Get-XcodeInfoList | Out-Null
 # Xcode section
 $xcodeInfo = Get-XcodeInfoList
 $markdown += New-MDHeader "Xcode" -Level 3
@@ -291,54 +231,13 @@ $markdown += New-MDHeader "Installed SDKs" -Level 4
 $markdown += Build-XcodeSDKTable $xcodeInfo | New-MDTable
 $markdown += New-MDNewLine
 
-# Disable simulators table on 11.0 beta for now since "simctl" tool doesn't work properly
-if (-not $os.IsBigSur) {
-    $markdown += New-MDHeader "Installed Simulators" -Level 4
-    $markdown += Build-XcodeSimulatorsTable $xcodeInfo | New-MDTable
-    $markdown += New-MDNewLine
-}
+$markdown += New-MDHeader "Installed Simulators" -Level 4
+$markdown += Build-XcodeSimulatorsTable $xcodeInfo | New-MDTable
+$markdown += New-MDNewLine
 
 # Android section
 $markdown += New-MDHeader "Android" -Level 3
-$androidInstalledPackages = Get-AndroidInstalledPackages
-
-$markdown += New-MDHeader "Android SDK Tools" -Level 4
-$androidSDKTools = $androidInstalledPackages | Where-Object { $_ -Match "Android SDK Tools" }
-$markdown += Build-AndroidSDKToolsTable $androidSDKTools | New-MDTable
-$markdown += New-MDNewLine
-
-$markdown += New-MDHeader "Android SDK Platform-Tools" -Level 4
-$androidSDKPlatformTools = $androidInstalledPackages | Where-Object { $_ -Match "Android SDK Platform-Tools" }
-$markdown += Build-AndroidSDKToolsTable $androidSDKPlatformTools | New-MDTable
-$markdown += New-MDNewLine
-
-$markdown += New-MDHeader "Android SDK Platforms" -Level 4
-$androidSDKPlatforms = $androidInstalledPackages | Where-Object { $_ -Match "Android SDK Platform " }
-$markdown += Build-AndroidSDKPlatformTable $androidSDKPlatforms | New-MDTable
-$markdown += New-MDNewLine
-
-$markdown += New-MDHeader "Android SDK Build-Tools" -Level 4
-$androidSDKBuildTools = $androidInstalledPackages | Where-Object { $_ -Match "Android SDK Build-Tools" }
-$markdown += Build-AndroidSDKBuildtoolsTable $androidSDKBuildTools | New-MDTable
-$markdown += New-MDNewLine
-
-$markdown += New-MDHeader "Android NDKs"  -Level 4
-$markdown += Build-AndroidNDKTable $androidInstalledPackages | New-MDTable
-$markdown += New-MDNewLine
-
-$markdown += New-MDHeader "Android Utils" -Level 4
-$markdown += Build-AndroidUtilsTable $androidInstalledPackages | New-MDTable
-$markdown += New-MDNewLine
-
-$androidGoogleAPIsTable = $androidInstalledPackages | Where-Object { $_ -Match "Google APIs" }
-if ($androidGoogleAPIsTable.Count -gt 0) {
-    $markdown += New-MDHeader "Android Google APIs" -Level 4
-    $markdown += Build-AndroidSDKPlatformTable $androidGoogleAPIsTable | New-MDTable
-    $markdown += New-MDNewLine
-}
-
-$markdown += New-MDHeader "Extra Packages" -Level 4
-$markdown += Build-AndroidExtraPackagesTable $androidInstalledPackages | New-MDTable
+$markdown += Build-AndroidTable | New-MDTable
 $markdown += New-MDNewLine
 
 #

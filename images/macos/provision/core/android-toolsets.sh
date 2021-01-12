@@ -1,10 +1,30 @@
-#!/bin/bash -e
+#!/bin/bash -e -o pipefail
 source ~/utils/utils.sh
+source ~/utils/invoke-tests.sh
 
-ANDROID_PLATFORM_LIST=($(get_toolset_value '.android."platform-list"[]'))
-ANDROID_BUILD_TOOLS=($(get_toolset_value '.android."build-tools"[]'))
+function filter_components_by_version {
+    minimumVersion=$1
+    shift
+    toolsArr=("$@")
+
+    for item in ${toolsArr[@]}
+    do
+        # take the last argument after spliting string by ';'' and '-''
+        version=$(echo "${item##*[-;]}")
+        if verlte $minimumVersion $version
+        then
+            components+=($item)
+        fi
+    done
+}
+
+components=()
+
+ANDROID_PLATFORM=($(get_toolset_value '.android.platform_min_version'))
+ANDROID_BUILD_TOOL=($(get_toolset_value '.android.build_tools_min_version'))
 ANDROID_EXTRA_LIST=($(get_toolset_value '.android."extra-list"[]'))
 ANDROID_ADDON_LIST=($(get_toolset_value '.android."addon-list"[]'))
+ANDROID_ADDITIONAL_TOOLS=($(get_toolset_value '.android."additional-tools"[]'))
 
 # Get the latest command line tools from https://developer.android.com/studio/index.html
 # Release note: https://developer.android.com/studio/releases/sdk-tools.html
@@ -48,17 +68,14 @@ echo y | $SDKMANAGER "cmake;3.6.4111459"
 echo "Installing latest ndk..."
 echo y | $SDKMANAGER "ndk-bundle"
 
-for platform_name in "${ANDROID_PLATFORM_LIST[@]}"
-do
-    echo "Installing platform $platform_name ..."
-    echo y | $SDKMANAGER "platforms;$platform_name"
-done
+availablePlatforms=($(${ANDROID_HOME}/tools/bin/sdkmanager --list | grep "platforms;android-" | cut -d"|" -f 1 | sort -u))
+filter_components_by_version $ANDROID_PLATFORM "${availablePlatforms[@]}"
 
-for build_tools_version in "${ANDROID_BUILD_TOOLS[@]}"
-do
-    echo "Installing build tools $build_tools_version ..."
-    echo y | $SDKMANAGER "build-tools;$build_tools_version"
-done
+allBuildTools=($(${ANDROID_HOME}/tools/bin/sdkmanager --list --include_obsolete | grep "build-tools;" | cut -d"|" -f 1 | sort -u))
+availableBuildTools=$(echo ${allBuildTools[@]//*rc[0-9]/})
+filter_components_by_version $ANDROID_BUILD_TOOL "${availableBuildTools[@]}"
+
+echo "y" | ${ANDROID_HOME}/tools/bin/sdkmanager ${components[@]}
 
 for extra_name in "${ANDROID_EXTRA_LIST[@]}"
 do
@@ -78,6 +95,12 @@ do
     echo y | $SDKMANAGER "add-ons;$addon_name"
 done
 
+for tool_name in "${ANDROID_ADDITIONAL_TOOLS[@]}"
+do
+    echo "Installing additional tool $tool_name ..."
+    echo y | $SDKMANAGER "$tool_name"
+done
+
 popd
 
 echo "Installing ProGuard-5..."
@@ -90,3 +113,5 @@ curl -L -o proguard5.tgz $PROGUARD_LOCATION
 tar xzf proguard5.tgz --strip 1 && rm -f proguard5.tgz
 cp ../proguard4/proguard-*.txt . # Copy the Proguard Android definitions from the previous version
 popd
+
+invoke_tests "Android"

@@ -1,41 +1,40 @@
-Import-Module (Join-Path $PSScriptRoot "SoftwareReport.Helpers.psm1") -DisableNameChecking
-
-function Get-OSName {
-    lsb_release -ds
+function Get-BashVersion {
+    $version = bash -c 'echo ${BASH_VERSION}'
+    return "Bash $version"
 }
 
 function Get-CPPVersions {
-    $cppVersions = apt list --installed 2>&1 | Where-Object { $_ -match "g\+\+-\d+"} | ForEach-Object {
-        $_ -match "now (?<version>\d+\.\d+\.\d+)-" | Out-Null
-        $Matches.version
-    }
+    $result = Get-CommandResult "apt list --installed" -Multiline
+    $cppVersions = $result.Output | Where-Object { $_ -match "g\+\+-\d+"} | ForEach-Object {
+        & $_.Split("/")[0] --version | Select-Object -First 1 | Take-OutputPart -Part 3
+    } | Sort-Object {[Version]$_}
     return "GNU C++ " + ($cppVersions -Join ", ")
 }
 
 function Get-FortranVersions {
-    $fortranVersions = apt list --installed 2>&1 | Where-Object { $_ -match "^gfortran-\d+"} | ForEach-Object {
+    $result = Get-CommandResult "apt list --installed" -Multiline
+    $fortranVersions = $result.Output | Where-Object { $_ -match "^gfortran-\d+"} | ForEach-Object {
         $_ -match "now (?<version>\d+\.\d+\.\d+)-" | Out-Null
         $Matches.version
-    }
+    } | Sort-Object {[Version]$_}
     return "GNU Fortran " + ($fortranVersions -Join ", ")
 }
 
 function Get-ClangVersions {
     $clangVersions = @()
-    $clangVersions = apt list --installed 2>&1 | Where-Object { $_ -match "^clang-\d+"} | ForEach-Object {
+    $result = Get-CommandResult "apt list --installed" -Multiline
+    $clangVersions = $result.Output | Where-Object { $_ -match "^clang-\d+"} | ForEach-Object {
         $clangCommand = ($_ -Split "/")[0]
         Invoke-Expression "$clangCommand --version" | Where-Object { $_ -match "clang version" } | ForEach-Object {
             $_ -match "clang version (?<version>\d+\.\d+\.\d+)-" | Out-Null
             $Matches.version
         }
-    }
+    } | Sort-Object {[Version]$_}
     return "Clang " + ($clangVersions -Join ", ")
 }
 
 function Get-ErlangVersion {
-    $result = Get-CommandResult "erl -version"
-    $result.Output -match "version (?<version>\d+\.\d+\.\d+)" | Out-Null
-    $version = $Matches.version
+    $version = (erl -eval 'erlang:display(erlang:system_info(version)), halt().' -noshell).Trim('"')
     return "Erlang $version"
 }
 
@@ -47,6 +46,11 @@ function Get-MonoVersion {
 function Get-NodeVersion {
     $nodeVersion = $(node --version).Substring(1)
     return "Node $nodeVersion"
+}
+
+function Get-PerlVersion {
+    $version = $(perl -e 'print substr($^V,1)')
+    return "Perl $version"
 }
 
 function Get-PythonVersion {
@@ -133,7 +137,8 @@ function Get-VcpkgVersion {
     $result = Get-CommandResult "vcpkg version"
     $result.Output -match "version (?<version>\d+\.\d+\.\d+)" | Out-Null
     $vcpkgVersion = $Matches.version
-    return "Vcpkg $vcpkgVersion"
+    $commitId = git -C "/usr/local/share/vcpkg" rev-parse --short HEAD
+    return "Vcpkg $vcpkgVersion (build from master \<$commitId>)"
 }
 
 function Get-AntVersion {
@@ -144,26 +149,27 @@ function Get-AntVersion {
 }
 
 function Get-GradleVersion {
-    $result = gradle -v | Out-String
-    $result -match "Gradle (?<version>\d+\.\d+\.\d+)" | Out-Null
-    $gradleVersion = $Matches.version
+    $gradleVersion = (gradle -v) -match "^Gradle \d" | Take-OutputPart -Part 1
     return "Gradle $gradleVersion"
 }
+
 function Get-MavenVersion {
     $result = mvn -version | Out-String
     $result -match "Apache Maven (?<version>\d+\.\d+\.\d+)" | Out-Null
     $mavenVersion = $Matches.version
     return "Maven $mavenVersion"
 }
+
 function Get-SbtVersion {
-    $result = sbt -version 2>&1 | Out-String
-    $result -match "sbt script version: (?<version>\d+\.\d+\.\d+)" | Out-Null
+    $result = Get-CommandResult "sbt -version"
+    $result.Output -match "sbt script version: (?<version>\d+\.\d+\.\d+)" | Out-Null
     $sbtVersion = $Matches.version
     return "Sbt $sbtVersion"
 }
 
 function Get-PHPVersions {
-    return $(apt list --installed 2>&1) | Where-Object { $_ -match "^php\d+\.\d+/"} | ForEach-Object {
+    $result = Get-CommandResult "apt list --installed" -Multiline
+    return $result.Output | Where-Object { $_ -match "^php\d+\.\d+/"} | ForEach-Object {
         $_ -match "now (?<version>\d+\.\d+\.\d+)-" | Out-Null
         $Matches.version
     }
@@ -227,6 +233,21 @@ function Get-AzModuleVersions {
     return $azModuleVersions
 }
 
+function Get-PowerShellModules {
+    $modules = (Get-ToolsetContent).powershellModules.name
+
+    $psModules = Get-Module -Name $modules -ListAvailable | Sort-Object Name | Group-Object Name
+    $psModules | ForEach-Object {
+        $moduleName = $_.Name
+        $moduleVersions = ($_.group.Version | Sort-Object -Unique) -join '<br>'
+
+        [PSCustomObject]@{
+            Module = $moduleName
+            Version = $moduleVersions
+        }
+    }
+}
+
 function Get-DotNetCoreSdkVersions {
     $unsortedDotNetCoreSdkVersion = dotnet --list-sdks list | ForEach-Object { $_ | Take-OutputPart -Part 0 }
     $dotNetCoreSdkVersion = $unsortedDotNetCoreSdkVersion -join " "
@@ -239,9 +260,27 @@ function Get-CachedDockerImages {
     return $images
 }
 
+function Get-CachedDockerImagesTableData {
+    return (sudo docker images --digests --format "*{{.Repository}}:{{.Tag}}|{{.Digest}} |{{.CreatedAt}}").Split("*")     | Where-Object { $_ } |  ForEach-Object {
+      $parts=$_.Split("|")
+      [PSCustomObject] @{
+             "Repository:Tag" = $parts[0]
+              "Digest" = $parts[1]
+              "Created" = $parts[2].split(' ')[0]
+         }
+    }
+}
+
 function Get-AptPackages {
     $toolsetJson = Get-ToolsetContent
     $apt = $toolsetJson.apt
     $pkgs = ($apt.common_packages + $apt.cmd_packages | Sort-Object) -join ", "
     return $pkgs
+}
+
+function Get-PipxVersion {
+    $result = (Get-CommandResult "pipx --version").Output
+    $result -match "(?<version>\d+\.\d+\.\d+\.?\d*)" | Out-Null
+    $pipxVersion = $Matches.Version
+    return "Pipx $pipxVersion"
 }

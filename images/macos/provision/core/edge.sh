@@ -1,7 +1,9 @@
+#!/bin/bash -e -o pipefail
 source ~/utils/utils.sh
+source ~/utils/invoke-tests.sh
 
 echo "Installing Microsoft Edge..."
-brew cask install microsoft-edge
+brew install --cask microsoft-edge
 
 EDGE_INSTALLATION_PATH="/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
 EDGE_VERSION=$("$EDGE_INSTALLATION_PATH" --version | cut -d' ' -f 3)
@@ -11,7 +13,7 @@ echo "Version of Microsoft Edge: ${EDGE_VERSION}"
 
 echo "Installing Microsoft Edge WebDriver..."
 
-EDGE_DRIVER_VERSION_URL="https://msedgedriver.azureedge.net/LATEST_RELEASE_${EDGE_VERSION_MAJOR}"
+EDGE_DRIVER_VERSION_URL="https://msedgedriver.azureedge.net/LATEST_RELEASE_${EDGE_VERSION_MAJOR}_MACOS"
 EDGE_DRIVER_LATEST_VERSION=$(curl -s "$EDGE_DRIVER_VERSION_URL" | iconv -f utf-16 -t utf-8 | tr -d '\r')
 EDGE_DRIVER_URL="https://msedgedriver.azureedge.net/${EDGE_DRIVER_LATEST_VERSION}/edgedriver_mac64.zip"
 
@@ -39,7 +41,7 @@ AUTOUPDATE_START="$HOME/Library/Preferences/com.microsoft.autoupdate2.plist"
 while [ ! -f "$AUTOUPDATE_START" ]
 do
     echo "Wait for MS update automatic installation"
-    sleep 30    
+    sleep 30
 done
 
 echo "kill autoupdate process"
@@ -56,3 +58,5 @@ sudo rm -rf "$HOME/Library/Caches/com.microsoft.autoupdate2"
 sudo rm -rf "/Library/Application Support/Microsoft/MAU2.0/"
 sudo rm -rf "/Library/LaunchAgents/com.microsoft.update.agent.plist"
 sudo rm -rf "/Library/PrivelegedHelperTools/com.microsoft.autoupdate.helper"
+
+invoke_tests "Browsers" "Edge"

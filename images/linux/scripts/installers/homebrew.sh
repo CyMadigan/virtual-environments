@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 ################################################################################
 ##  File:  homebrew.sh
 ##  Desc:  Installs the Homebrew on Linux
@@ -12,9 +12,6 @@ source $HELPER_SCRIPTS/etc-environment.sh
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
 eval $(/home/linuxbrew/.linuxbrew/bin/brew shellenv)
 
-# Make brew files and directories writable by any user
-sudo chmod -R o+w $HOMEBREW_PREFIX
-
 # Update /etc/environemnt
 ## Put HOMEBREW_* variables
 brew shellenv|grep 'export HOMEBREW'|sed -E 's/^export (.*);$/\1/' | sudo tee -a /etc/environment
@@ -26,7 +23,4 @@ prependEtcEnvironmentPath "$brew_path"
 echo "Validate the installation reloading /etc/environment"
 reloadEtcEnvironment
 
-if ! command -v brew; then
-    echo "brew was not installed"
-    exit 1
-fi
+invoke_tests "Tools" "Homebrew"

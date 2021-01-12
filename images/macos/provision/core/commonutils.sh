@@ -1,53 +1,21 @@
-#!/bin/sh
-
-set -e
-
+#!/bin/bash -e -o pipefail
 source ~/utils/utils.sh
-# brew install
-binst_common_utils=(
-    carthage
-    xctool
-    cmake
-    bats
-    parallel
-    subversion
-    go
-    gnupg
-    llvm
-    libpq
-    zstd
-    packer
-    helm
-    aliyun-cli
-    bazelisk
-    github/gh/gh
-    p7zip
-    ant
-    yamllint
-    aria2
-)
+source ~/utils/invoke-tests.sh
 
-for package in ${binst_common_utils[@]}; do
-    echo "Install $package"
-    brew install $package
+common_packages=$(get_toolset_value '.brew.common_packages[]')
+for package in $common_packages; do
+    echo "Installing $package..."
+    brew_smart_install "$package"
 done
 
-# brew cask install
-bcask_common_utils=(
-    julia
-    virtualbox
-    vagrant
-    r
-)
-
-for package in ${bcask_common_utils[@]}; do
-    echo "Install $package"
-    brew cask install $package
+cask_packages=$(get_toolset_value '.brew.cask_packages[]')
+for package in $cask_packages; do
+    echo "Installing $package..."
+    brew install --cask $package
 done
-
-if ! is_HighSierra; then
-    brew install swiftlint
-fi
 
 # Invoke bazel to download the latest bazel version via bazelisk
 bazel
+
+# Invoke tests for all common tools
+invoke_tests "Common" "CommonUtils"

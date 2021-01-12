@@ -12,6 +12,8 @@ After successful image generation, a snapshot of the temporary VM will be conver
 - `packer` - Can be downloaded from https://www.packer.io/downloads
 - `PowerShell 5.0 or higher` or `PSCore` for linux distributes.
 - `Azure CLI ` - https://docs.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest
+- `Azure Powershell module` - https://docs.microsoft.com/en-us/powershell/azure/install-az-ps?view=azps-4.6.1
+- `Git for Windows` - https://gitforwindows.org/
 
 ### Azure DevOps self-hosted pool requirements
 To connect to a temporary VM packer use WinRM or SSH connections on public IP interfaces.
@@ -31,22 +33,23 @@ Download `packer` from https://www.packer.io/downloads, or install it via Chocol
 choco install packer
 ```
 
-Install Azure CLI - https://docs.microsoft.com/ru-ru/cli/azure/install-azure-cli-windows?view=azure-cli-latest&tabs=azure-cli.
+Install Azure CLI - https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-windows?view=azure-cli-latest&tabs=azure-cli.
 ```
 Invoke-WebRequest -Uri https://aka.ms/installazurecliwindows -OutFile .\AzureCLI.msi; Start-Process msiexec.exe -Wait -ArgumentList '/I AzureCLI.msi /quiet'; rm .\AzureCLI.msi
 ```
 
 Download Virtual-Environments repository.
 ```
+Set-Location c:\
 git clone https://github.com/actions/virtual-environments.git
 ```
 
-Import [GenerateResourcesAndImage](helpers/GenerateResourcesAndImage.ps1) script from `/helpers` folder, and run `GenerateResourcesAndImage` function via Powershell.
+Import [GenerateResourcesAndImage](../helpers/GenerateResourcesAndImage.ps1) script from `/helpers` folder, and run `GenerateResourcesAndImage` function via Powershell.
 
 ```
-cd C:\virtual-environments
+Set-Location C:\virtual-environments
 
-Import-Module "helpers\GenerateResourcesAndImage.ps1"
+Import-Module .\helpers\GenerateResourcesAndImage.ps1
 
 GenerateResourcesAndImage -SubscriptionId {YourSubscriptionId} -ResourceGroupName "myTestResourceGroup" -ImageGenerationRepositoryRoot "$pwd" -ImageType Ubuntu1604 -AzureLocation "East US"
 ```
@@ -62,12 +65,12 @@ The function automatically creates all required Azure resources and kicks off pa
 *Please, check synopsis of `GenerateResourcesAndImage` for details about non-mandatory parameters.*
 
 #### Generated VM Deployment
-After the successful image generation, Virtual Machine can be created from the generated VHD using [CreateAzureVMFromPackerTemplate](helpers/CreateAzureVMFromPackerTemplate.ps1) script.
+After the successful image generation, Virtual Machine can be created from the generated VHD using [CreateAzureVMFromPackerTemplate](../helpers/CreateAzureVMFromPackerTemplate.ps1) script.
 
 ```
-cd C:\virtual-environments
+Set-Location C:\virtual-environments
 
-Import-Module helpers\CreateAzureVMFromPackerTemplate.ps1
+Import-Module .\helpers\CreateAzureVMFromPackerTemplate.ps1
 
 CreateAzureVMFromPackerTemplate -SubscriptionId {YourSubscriptionId}  -ResourceGroupName {ResourceGroupName} -TemplateFile "C:\BuildVmImages\temporaryTemplate.json" -VirtualMachineName "testvm1" -AdminUsername "shady1" -AdminPassword "SomeSecurePassword1" -AzureLocation "eastus"
 ```

@@ -1,24 +1,16 @@
-#!/bin/bash
+#!/bin/bash -e
 ################################################################################
 ##  File:  google-chrome.sh
 ##  Desc:  Installs google-chrome  and chromedriver
 ################################################################################
 
-
 LSB_RELEASE=$(lsb_release -rs)
 
 wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
 apt-get update
 apt-get install -y google-chrome-stable
 echo "CHROME_BIN=/usr/bin/google-chrome" | tee -a /etc/environment
-
-# Run tests to determine that the software installed as expected
-echo "Testing to make sure that script performed as expected, and basic scenarios work"
-if ! command -v google-chrome; then
-    echo "google-chrome was not installed"
-    exit 1
-fi
 
 CHROME_VERSION=$(google-chrome --product-version)
 CHROME_VERSION=${CHROME_VERSION%.*}
@@ -42,9 +34,4 @@ chmod +x $CHROMEDRIVER_BIN
 ln -s "$CHROMEDRIVER_BIN" /usr/bin/
 echo "CHROMEWEBDRIVER=$CHROMEDRIVER_DIR" | tee -a /etc/environment
 
-# Run tests to determine that the chromedriver installed as expected
-echo "Testing to make sure that script performed as expected, and basic scenarios work"
-if ! command -v chromedriver; then
-    echo "chromedriver was not installed"
-    exit 1
-fi
+invoke_tests "Browsers" "Chrome"

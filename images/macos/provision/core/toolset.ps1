@@ -4,6 +4,8 @@
 ##  Desc:  Install toolset
 ################################################################################
 
+Import-Module "~/image-generation/helpers/Common.Helpers.psm1"
+
 Function Get-ToolcacheFromToolset {
     $toolsetPath = Join-Path $env:HOME "image-generation" "toolset.json"
     $toolsetJson = Get-Content -Raw $toolsetPath | ConvertFrom-Json
@@ -21,7 +23,7 @@ Function Install-Asset {
     $assetArchivePath = Join-Path $assetFolderPath $ReleaseAsset.filename
 
     Write-Host "Download $($ReleaseAsset.filename) archive to the $assetFolderPath folder..."
-    wget -P $assetFolderPath $ReleaseAsset.download_url --retry-connrefused --retry-on-http-error=429,500,503 --wait=30 --no-verbose
+    Start-DownloadWithRetry -Url $ReleaseAsset.download_url -DownloadPath $assetFolderPath
 
     Write-Host "Extract $($ReleaseAsset.filename) content..."
     tar -xzf $assetArchivePath -C $assetFolderPath
@@ -38,7 +40,7 @@ $tools =  Get-ToolcacheFromToolset | Where-Object {$ToolsToInstall -contains $_.
 
 foreach ($tool in $tools) {
     # Get versions manifest for current tool
-    $assets = Invoke-RestMethod $tool.url
+    $assets = Invoke-RestMethodWithRetry -Url $tool.url
 
     # Get github release asset for each version
     foreach ($version in $tool.versions) {
